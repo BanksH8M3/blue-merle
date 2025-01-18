@@ -17,6 +17,8 @@ class Modes(Enum):
 ap = argparse.ArgumentParser()
 ap.add_argument("-v", "--verbose", help="Enables verbose output",
                 action="store_true")
+ap.add_argument("-g", "--generate-only", help="Only generates an IMEI rather than setting it",
+                   action="store_true")
 modes = ap.add_mutually_exclusive_group()
 modes.add_argument("-d", "--deterministic", help="Switches IMEI generation to deterministic mode", action="store_true")
 modes.add_argument("-s", "--static", help="Sets user-defined IMEI",
@@ -42,7 +44,11 @@ TIMEOUT = 3
 
 
 def get_imsi():
+    if (verbose):
+        print(f'Obtaining Serial {TTY} with timeout {TIMEOUT}...')
     with serial.Serial(TTY, BAUDRATE, timeout=TIMEOUT, exclusive=True) as ser:
+        if (verbose):
+            print('Getting IMSI')
         ser.write(b'AT+CIMI\r')
         # TODO: read loop until we have 'enough' of what to expect
         output = ser.read(64)
@@ -141,6 +147,10 @@ def generate_imei(imei_prefix, imsi_d):
 
 
 def validate_imei(imei):
+    # before anything check if length is 14 characters
+    if len(imei) != 14:
+        print(f"NOT A VALID IMEI: {imei} - IMEI must be 14 characters in length")
+        return False
     # cut off last digit
     validation_digit = int(imei[-1])
     imei_verify = imei[0:14]
@@ -172,10 +182,12 @@ def validate_imei(imei):
 
 if __name__ == '__main__':
     args = ap.parse_args()
+    imsi_d = None
     if args.verbose:
         verbose = args.verbose
     if args.deterministic:
         mode = Modes.DETERMINISTIC
+        imsi_d = get_imsi()
     if args.random:
         mode = Modes.RANDOM
     if args.static is not None:
@@ -188,11 +200,11 @@ if __name__ == '__main__':
         else:
             exit(-1)
     else:
-        imsi_d = get_imsi()
         imei = generate_imei(imei_prefix, imsi_d)
         if (verbose):
             print(f"Generated new IMEI: {imei}")
-        if not set_imei(imei):
-            exit(-1)
+        if not args.generate_only:
+            if not set_imei(imei):
+                exit(-1)
 
     exit(0)
